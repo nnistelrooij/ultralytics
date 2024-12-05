@@ -537,13 +537,14 @@ class RandomPerspective:
 
         segments = instances.segments
         keypoints = instances.keypoints
+        extras = instances.extras
         # Update bboxes if there are segments.
         if len(segments):
             bboxes, segments = self.apply_segments(segments, M)
 
         if keypoints is not None:
             keypoints = self.apply_keypoints(keypoints, M)
-        new_instances = Instances(bboxes, segments, keypoints, bbox_format="xyxy", normalized=False)
+        new_instances = Instances(bboxes, segments, keypoints, extras, bbox_format="xyxy", normalized=False)
         # Clip
         new_instances.clip(*self.size)
 
@@ -676,6 +677,7 @@ class RandomFlip:
             # For keypoints
             if self.flip_idx is not None and instances.keypoints is not None:
                 instances.keypoints = np.ascontiguousarray(instances.keypoints[:, self.flip_idx, :])
+            # instances.extras = np.ascontiguousarray(instances.extras[:, [2, 3, 0, 1]])
         labels["img"] = np.ascontiguousarray(img)
         labels["instances"] = instances
         return labels
@@ -894,6 +896,7 @@ class Format:
         normalize=True,
         return_mask=False,
         return_keypoint=False,
+        return_extra=False,
         return_obb=False,
         mask_ratio=4,
         mask_overlap=True,
@@ -904,6 +907,7 @@ class Format:
         self.normalize = normalize
         self.return_mask = return_mask  # set False when training detection only
         self.return_keypoint = return_keypoint
+        self.return_extra = return_extra
         self.return_obb = return_obb
         self.mask_ratio = mask_ratio
         self.mask_overlap = mask_overlap
@@ -935,6 +939,8 @@ class Format:
         labels["bboxes"] = torch.from_numpy(instances.bboxes) if nl else torch.zeros((nl, 4))
         if self.return_keypoint:
             labels["keypoints"] = torch.from_numpy(instances.keypoints)
+        if self.return_extra:
+            labels['extras'] = torch.from_numpy(instances.extras)
         if self.return_obb:
             labels["bboxes"] = (
                 xyxyxyxy2xywhr(torch.from_numpy(instances.segments)) if len(instances.segments) else torch.zeros((0, 5))

@@ -94,7 +94,7 @@ def verify_image(args):
 
 def verify_image_label(args):
     """Verify one image-label pair."""
-    im_file, lb_file, prefix, keypoint, num_cls, nkpt, ndim = args
+    im_file, lb_file, prefix, keypoint, extra, num_cls, nkpt, ndim = args
     # Number (missing, found, empty, corrupt), message, segments, keypoints
     nm, nf, ne, nc, msg, segments, keypoints = 0, 0, 0, 0, "", [], None
     try:
@@ -119,19 +119,22 @@ def verify_image_label(args):
                 lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
                 if any(len(x) > 6 for x in lb) and (not keypoint):  # is segment
                     classes = np.array([x[0] for x in lb], dtype=np.float32)
-                    segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in lb]  # (cls, xy1...)
+                    segments = [np.array(x[1 + 2*extra:], dtype=np.float32).reshape(-1, 2) for x in lb]  # (cls, xy1...)
                     lb = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
+                elif any(len(x) > (5 + 2*extra + nkpt * ndim) for x in lb) and keypoint:  # is segment + keypoint
+                    segments = [np.array(x[5 + 2*extra + nkpt * ndim:], dtype=np.float32).reshape(-1, 2) for x in lb]  # (cls, xy1...)
+                    lb = [x[:5 + 2*extra + nkpt * ndim] for x in lb]
                 lb = np.array(lb, dtype=np.float32)
             nl = len(lb)
             if nl:
                 if keypoint:
-                    assert lb.shape[1] == (5 + nkpt * ndim), f"labels require {(5 + nkpt * ndim)} columns each"
-                    points = lb[:, 5:].reshape(-1, ndim)[:, :2]
+                    assert lb.shape[1] == (5 + 2*extra + nkpt * ndim), f"labels require {(5 + 2*extra + nkpt * ndim)} columns each"
+                    points = lb[:, 5:lb.shape[1] - 2*extra].reshape(-1, ndim)[:, :2]
                 else:
-                    assert lb.shape[1] == 5, f"labels require 5 columns, {lb.shape[1]} columns detected"
-                    points = lb[:, 1:]
+                    assert lb.shape[1] == 5 + 2*extra, f"labels require 5 columns, {lb.shape[1]} columns detected"
+                    points = lb[:, 1 + 2*extra:]
                 assert points.max() <= 1, f"non-normalized or out of bounds coordinates {points[points > 1]}"
-                assert lb.min() >= 0, f"negative label values {lb[lb < 0]}"
+                assert lb[:, :-2*extra].min() >= 0, f"negative label values {lb[lb < 0]}"
 
                 # All labels
                 max_cls = lb[:, 0].max()  # max label count
@@ -147,16 +150,16 @@ def verify_image_label(args):
                     msg = f"{prefix}WARNING ⚠️ {im_file}: {nl - len(i)} duplicate labels removed"
             else:
                 ne = 1  # label empty
-                lb = np.zeros((0, (5 + nkpt * ndim) if keypoint else 5), dtype=np.float32)
+                lb = np.zeros((0, (5 + 2*extra + nkpt * ndim) if keypoint else 5 + 2*extra), dtype=np.float32)
         else:
             nm = 1  # label missing
-            lb = np.zeros((0, (5 + nkpt * ndim) if keypoints else 5), dtype=np.float32)
+            lb = np.zeros((0, (5 + 2*extra + nkpt * ndim) if keypoints else 5 + 2*extra), dtype=np.float32)
         if keypoint:
-            keypoints = lb[:, 5:].reshape(-1, nkpt, ndim)
+            keypoints = lb[:, 5:lb.shape[1] - 2*extra].reshape(-1, nkpt, ndim)
             if ndim == 2:
                 kpt_mask = np.where((keypoints[..., 0] < 0) | (keypoints[..., 1] < 0), 0.0, 1.0).astype(np.float32)
                 keypoints = np.concatenate([keypoints, kpt_mask[..., None]], axis=-1)  # (nl, nkpt, 3)
-        lb = lb[:, :5]
+        lb = np.column_stack((lb[:, :5], lb[:, 5 + nkpt * ndim:]))
         return im_file, lb, shape, segments, keypoints, nm, nf, ne, nc, msg
     except Exception as e:
         nc = 1

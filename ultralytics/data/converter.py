@@ -3,6 +3,7 @@
 import json
 from collections import defaultdict
 from pathlib import Path
+from typing import List
 
 import cv2
 import numpy as np
@@ -219,6 +220,7 @@ def convert_coco(
     use_segments=False,
     use_keypoints=False,
     cls91to80=True,
+    extra: List[str]=[],
 ):
     """
     Converts COCO dataset annotations to a YOLO annotation format  suitable for training YOLO models.
@@ -229,6 +231,7 @@ def convert_coco(
         use_segments (bool, optional): Whether to include segmentation masks in the output.
         use_keypoints (bool, optional): Whether to include keypoint annotations in the output.
         cls91to80 (bool, optional): Whether to map 91 COCO class IDs to the corresponding 80 COCO class IDs.
+        extra (list[str], optional): Extra annotation attributes to add in saved annotations.
 
     Example:
         ```python
@@ -271,6 +274,7 @@ def convert_coco(
             bboxes = []
             segments = []
             keypoints = []
+            extras = []
             for ann in anns:
                 if ann["iscrowd"]:
                     continue
@@ -281,6 +285,10 @@ def convert_coco(
                 box[[1, 3]] /= h  # normalize y
                 if box[2] <= 0 or box[3] <= 0:  # if w <= 0 and h <= 0
                     continue
+
+                extras.append([])
+                for attribute in extra:
+                    extras[-1].append(ann[attribute])
 
                 cls = coco80[ann["category_id"] - 1] if cls91to80 else ann["category_id"] - 1  # class
                 box = [cls] + box.tolist()
@@ -296,6 +304,9 @@ def convert_coco(
                         else:
                             s = [j for i in ann["segmentation"] for j in i]  # all segments concatenated
                             s = (np.array(s).reshape(-1, 2) / np.array([w, h])).reshape(-1).tolist()
+
+                        if max(s) > 1:
+                            k = 0
                         s = [cls] + s
                         segments.append(s)
                     if use_keypoints and ann.get("keypoints") is not None:
@@ -307,11 +318,15 @@ def convert_coco(
             with open((fn / f).with_suffix(".txt"), "a") as file:
                 for i in range(len(bboxes)):
                     if use_keypoints:
-                        line = (*(keypoints[i]),)  # cls, box, keypoints
+                        line = (*(keypoints[i]),) + (*(extras[i]),)  # cls, box, keypoints[, extras]
+                        if use_segments and len(segments[i]) > 0:
+                            line += (*(segments[i][1:]),)  # cls, box, keypoints[, extras], segments
+                    elif use_segments and len(segments[i]) > 0:
+                        assert not extra
+                        line += (*(segments[i]),)  # cls, segments
                     else:
-                        line = (
-                            *(segments[i] if use_segments and len(segments[i]) > 0 else bboxes[i]),
-                        )  # cls, box or segments
+                        assert not extra
+                        line = (*(bboxes[i]),)  # cls, box
                     file.write(("%g " * len(line)).rstrip() % line + "\n")
 
     LOGGER.info(f"COCO data converted successfully.\nResults saved to {save_dir.resolve()}")

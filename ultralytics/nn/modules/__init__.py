@@ -62,7 +62,7 @@ from .conv import (
     RepConv,
     SpatialAttention,
 )
-from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect
+from .head import OBB, Classify, Detect, Pose, Crowding, RTDETRDecoder, Segment, WorldDetect
 from .transformer import (
     AIFI,
     MLP,

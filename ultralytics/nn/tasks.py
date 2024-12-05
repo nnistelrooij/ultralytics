@@ -37,6 +37,7 @@ from ultralytics.nn.modules import (
     HGBlock,
     HGStem,
     Pose,
+    Crowding,
     RepC3,
     RepConv,
     ResNetLayer,
@@ -52,7 +53,7 @@ from ultralytics.nn.modules import (
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
-from ultralytics.utils.loss import v8ClassificationLoss, v8DetectionLoss, v8OBBLoss, v8PoseLoss, v8SegmentationLoss
+from ultralytics.utils.loss import v8ClassificationLoss, v8CrowdingLoss, v8DetectionLoss, v8OBBLoss, v8PoseLoss, v8SegmentationLoss
 from ultralytics.utils.plotting import feature_visualization
 from ultralytics.utils.torch_utils import (
     fuse_conv_and_bn,
@@ -293,7 +294,7 @@ class DetectionModel(BaseModel):
         if isinstance(m, Detect):  # includes all Detect subclasses like Segment, Pose, OBB, WorldDetect
             s = 256  # 2x min stride
             m.inplace = self.inplace
-            forward = lambda x: self.forward(x)[0] if isinstance(m, (Segment, Pose, OBB)) else self.forward(x)
+            forward = lambda x: self.forward(x)[0] if isinstance(m, (Segment, Pose, Crowding, OBB)) else self.forward(x)
             m.stride = torch.tensor([s / x.shape[-2] for x in forward(torch.zeros(1, ch, s, s))])  # forward
             self.stride = m.stride
             m.bias_init()  # only run once
@@ -386,6 +387,23 @@ class PoseModel(DetectionModel):
     def init_criterion(self):
         """Initialize the loss criterion for the PoseModel."""
         return v8PoseLoss(self)
+    
+
+class CrowdingModel(DetectionModel):
+    """YOLOv8 crowding tool model."""
+
+    def __init__(self, cfg="yolov8n-crowding.yaml", ch=3, nc=None, data_kpt_shape=(None, None), verbose=True):
+        """Initialize YOLOv8 Crowding model."""
+        if not isinstance(cfg, dict):
+            cfg = yaml_model_load(cfg)  # load model YAML
+        if any(data_kpt_shape) and list(data_kpt_shape) != list(cfg["kpt_shape"]):
+            LOGGER.info(f"Overriding model.yaml kpt_shape={cfg['kpt_shape']} with kpt_shape={data_kpt_shape}")
+            cfg["kpt_shape"] = data_kpt_shape
+        super().__init__(cfg=cfg, ch=ch, nc=nc, verbose=verbose)
+
+    def init_criterion(self):
+        """Initialize the loss criterion for the CrowdingModel."""
+        return v8CrowdingLoss(self)
 
 
 class ClassificationModel(BaseModel):
@@ -895,9 +913,9 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
-        elif m in (Detect, WorldDetect, Segment, Pose, OBB, ImagePoolingAttn):
+        elif m in (Detect, WorldDetect, Segment, Pose, Crowding, OBB, ImagePoolingAttn):
             args.append([ch[x] for x in f])
-            if m is Segment:
+            if m is Segment or m is Crowding:
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
         elif m is RTDETRDecoder:  # special case, channels arg must be passed in index 1
             args.insert(1, [ch[x] for x in f])
@@ -986,6 +1004,8 @@ def guess_model_task(model):
             return "segment"
         if m == "pose":
             return "pose"
+        if m == "crowding":
+            return "crowding"
         if m == "obb":
             return "obb"
 
@@ -1010,6 +1030,8 @@ def guess_model_task(model):
                 return "classify"
             elif isinstance(m, Pose):
                 return "pose"
+            elif isinstance(m, Crowding):
+                return "crowding"
             elif isinstance(m, OBB):
                 return "obb"
             elif isinstance(m, (Detect, WorldDetect)):

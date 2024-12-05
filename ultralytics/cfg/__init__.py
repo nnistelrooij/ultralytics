@@ -37,6 +37,7 @@ TASK2DATA = {
     "segment": "coco8-seg.yaml",
     "classify": "imagenet10",
     "pose": "coco8-pose.yaml",
+    "crowding": "coco8-crowding.yaml",
     "obb": "dota8.yaml",
 }
 TASK2MODEL = {

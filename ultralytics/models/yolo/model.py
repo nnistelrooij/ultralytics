@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ultralytics.engine.model import Model
 from ultralytics.models import yolo
-from ultralytics.nn.tasks import ClassificationModel, DetectionModel, OBBModel, PoseModel, SegmentationModel, WorldModel
+from ultralytics.nn.tasks import ClassificationModel, CrowdingModel, DetectionModel, OBBModel, PoseModel, SegmentationModel, WorldModel
 from ultralytics.utils import yaml_load, ROOT
 
 
@@ -49,6 +49,12 @@ class YOLO(Model):
                 "trainer": yolo.pose.PoseTrainer,
                 "validator": yolo.pose.PoseValidator,
                 "predictor": yolo.pose.PosePredictor,
+            },
+            "crowding": {
+                "model": CrowdingModel,
+                "trainer": yolo.crowding.CrowdingTrainer,
+                "validator": yolo.crowding.CrowdingValidator,
+                "predictor": yolo.crowding.CrowdingPredictor,
             },
             "obb": {
                 "model": OBBModel,

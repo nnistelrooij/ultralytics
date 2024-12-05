@@ -94,7 +94,7 @@ class Results(SimpleClass):
         tojson(normalize=False): Converts detection results to JSON format.
     """
 
-    def __init__(self, orig_img, path, names, boxes=None, masks=None, probs=None, keypoints=None, obb=None) -> None:
+    def __init__(self, orig_img, path, names, boxes=None, masks=None, probs=None, keypoints=None, sizes=None, obb=None) -> None:
         """
         Initialize the Results class.
 
@@ -106,6 +106,7 @@ class Results(SimpleClass):
             masks (torch.tensor, optional): A 3D tensor of detection masks, where each mask is a binary image.
             probs (torch.tensor, optional): A 1D tensor of probabilities of each class for classification task.
             keypoints (torch.tensor, optional): A 2D tensor of keypoint coordinates for each detection.
+            sizes (torch.tensor, optional): A 0D tensor of tooth size for each detection.
             obb (torch.tensor, optional): A 2D tensor of oriented bounding box coordinates for each detection.
         """
         self.orig_img = orig_img
@@ -114,6 +115,7 @@ class Results(SimpleClass):
         self.masks = Masks(masks, self.orig_shape) if masks is not None else None  # native size or imgsz masks
         self.probs = Probs(probs) if probs is not None else None
         self.keypoints = Keypoints(keypoints, self.orig_shape) if keypoints is not None else None
+        self.sizes = sizes
         self.obb = OBB(obb, self.orig_shape) if obb is not None else None
         self.speed = {"preprocess": None, "inference": None, "postprocess": None}  # milliseconds per image
         self.names = names
